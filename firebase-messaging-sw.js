@@ -5,13 +5,12 @@ self.addEventListener('notificationclick', function (event) {
   var d = event.notification.data || {};
   var m = d.FCM_MSG || {};
   var url = (m.data && m.data.url) || (m.fcmOptions && m.fcmOptions.link) || PN_CONFIG.siteUrl;
+  // المرور عبر go.html لتسجيل المشترك القديم في لوحة الأدمن ثم فتح الرابط
+  url = self.location.origin + '/go.html?u=' + encodeURIComponent(url);
   event.notification.close();
   event.stopImmediatePropagation();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].url === url && 'focus' in list[i]) return list[i].focus();
-      }
       return clients.openWindow(url);
     })
   );
