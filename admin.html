@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>لوحة الأدمن - الإشعارات</title>
+<link rel="icon" href="/icon.png">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#f4f5f7;color:#222;padding:20px}
+.wrap{max-width:760px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:10px;flex-wrap:wrap}
+h1{font-size:22px;margin:0}
+.btn{padding:10px 16px;border:0;border-radius:10px;font-family:inherit;font-size:14px;cursor:pointer;text-decoration:none;display:inline-block}
+.red{background:#e53935;color:#fff}.gray{background:#e4e6ea;color:#333}
+.card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:#fff;border-radius:14px;padding:16px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.stat .n{font-size:30px;font-weight:bold;color:#e53935;margin:6px 0}
+.stat .l{font-size:13px;color:#777}
+.stat.big{grid-column:1/-1}.stat.big .n{font-size:46px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:9px 6px;border-bottom:1px solid #eee;text-align:right}
+th{color:#777;font-weight:normal}
+.tag{padding:2px 8px;border-radius:20px;font-size:12px;background:#eee}
+.tag.android{background:#e8f5e9;color:#2e7d32}.tag.ios{background:#e3f2fd;color:#1565c0}.tag.desktop{background:#fff3e0;color:#e65100}
+#login{text-align:center;padding:40px 20px}
+#login p{color:#777}
+#msg{color:#e53935;margin-top:12px;font-size:14px}
+.hide{display:none}
+@media (prefers-color-scheme:dark){
+  body{background:#121212;color:#eee}.card,.stat{background:#1e1e1e}
+  th,td{border-color:#2c2c2c}.gray{background:#333;color:#ddd}.tag{background:#333}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="login" class="card">
+    <h1>🔔 لوحة الأدمن</h1>
+    <p>سجّل الدخول بحساب Google الخاص بالأدمن</p>
+    <button class="btn red" id="signin">تسجيل الدخول بـ Google</button>
+    <div id="msg"></div>
+  </div>
+
+  <div id="panel" class="hide">
+    <header>
+      <h1>🔔 مشتركو الإشعارات</h1>
+      <div>
+        <a class="btn red" target="_blank" href="https://console.firebase.google.com/project/tounesfm-push/notification/compose">✉️ إرسال إشعار</a>
+        <button class="btn gray" id="refresh">تحديث</button>
+        <button class="btn gray" id="signout">خروج</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="stat big"><div class="l">إجمالي المشتركين</div><div class="n" id="total">…</div></div>
+      <div class="stat"><div class="l">اليوم</div><div class="n" id="today">…</div></div>
+      <div class="stat"><div class="l">آخر 7 أيام</div><div class="n" id="week">…</div></div>
+      <div class="stat"><div class="l">آخر 30 يومًا</div><div class="n" id="month">…</div></div>
+      <div class="stat"><div class="l">أندرويد</div><div class="n" id="android">…</div></div>
+      <div class="stat"><div class="l">آيفون</div><div class="n" id="ios">…</div></div>
+      <div class="stat"><div class="l">كمبيوتر</div><div class="n" id="desktop">…</div></div>
+    </div>
+
+    <div class="card">
+      <b>آخر 30 مشتركًا</b>
+      <table>
+        <thead><tr><th>التاريخ</th><th>الجهاز</th><th>اللغة</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="3">جاري التحميل...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="/config.js"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, query, where, orderBy, limit, getDocs, getCountFromServer, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const app = initializeApp(PN_CONFIG.firebase);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const subs = collection(db, 'subscribers');
+const $ = (id) => document.getElementById(id);
+
+const PLAT = { android: 'أندرويد', ios: 'آيفون', desktop: 'كمبيوتر' };
+
+async function count(q) {
+  const snap = await getCountFromServer(q);
+  return snap.data().count;
+}
+
+function since(days) {
+  const d = new Date();
+  if (days === 0) d.setHours(0, 0, 0, 0); else d.setDate(d.getDate() - days);
+  return Timestamp.fromDate(d);
+}
+
+async function load() {
+  try {
+    const [total, today, week, month, an, io, de] = await Promise.all([
+      count(subs),
+      count(query(subs, where('created', '>=', since(0)))),
+      count(query(subs, where('created', '>=', since(7)))),
+      count(query(subs, where('created', '>=', since(30)))),
+      count(query(subs, where('platform', '==', 'android'))),
+      count(query(subs, where('platform', '==', 'ios'))),
+      count(query(subs, where('platform', '==', 'desktop')))
+    ]);
+    const fmt = (n) => n.toLocaleString('ar-TN');
+    $('total').textContent = fmt(total); $('today').textContent = fmt(today);
+    $('week').textContent = fmt(week);   $('month').textContent = fmt(month);
+    $('android').textContent = fmt(an);  $('ios').textContent = fmt(io); $('desktop').textContent = fmt(de);
+
+    const last = await getDocs(query(subs, orderBy('created', 'desc'), limit(30)));
+    let html = '';
+    last.forEach((doc) => {
+      const d = doc.data();
+      const date = d.created ? d.created.toDate().toLocaleString('ar-TN', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+      const p = d.platform || '-';
+      html += `<tr><td>${date}</td><td><span class="tag ${p}">${PLAT[p] || p}</span></td><td>${(d.lang || '-').replace(/</g, '')}</td></tr>`;
+    });
+    $('rows').innerHTML = html || '<tr><td colspan="3">لا يوجد مشتركون بعد</td></tr>';
+  } catch (e) {
+    console.log(e);
+    if (e.code === 'permission-denied') {
+      await signOut(auth);
+      $('msg').textContent = 'هذا الحساب ليس حساب الأدمن.';
+    } else {
+      $('rows').innerHTML = '<tr><td colspan="3">خطأ: ' + (e.code || e.message) + '</td></tr>';
+    }
+  }
+}
+
+$('signin').onclick = () => {
+  $('msg').textContent = '';
+  signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'تعذّر تسجيل الدخول: ' + e.code; });
+};
+$('signout').onclick = () => signOut(auth);
+$('refresh').onclick = load;
+
+onAuthStateChanged(auth, (user) => {
+  $('login').classList.toggle('hide', !!user);
+  $('panel').classList.toggle('hide', !user);
+  if (user) load();
+});
+</script>
+</body>
+</html>
