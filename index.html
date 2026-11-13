@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>تفعيل الإشعارات</title>
 <link rel="icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="تونس FM">
+<meta name="theme-color" content="#e53935">
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
@@ -19,8 +24,11 @@ button{width:100%;padding:13px;border:0;border-radius:10px;background:#e53935;co
   font-family:inherit;cursor:pointer}
 button:disabled{opacity:.6}
 a.back{display:block;margin-top:14px;color:#888;font-size:13px}
+.ios{display:none;text-align:right;font-size:14px;line-height:2;margin:0 0 16px;padding:12px;background:#fff5f5;border-radius:10px}
+.ios b{color:#e53935}
 #tok{display:none;margin-top:14px;font-size:11px;word-break:break-all;background:#f6f6f6;padding:8px;border-radius:8px;text-align:left;direction:ltr}
 @media (prefers-color-scheme:dark){
+  .ios{background:#2a1c1c}
   body{background:#121212;color:#eee}.box{background:#1e1e1e}p{color:#aaa}#tok{background:#2a2a2a}
 }
 </style>
@@ -30,6 +38,13 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
   <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg></div>
   <h1 id="h">فعّل الإشعارات 🔔</h1>
   <p id="p">اضغط على الزر ثم اختر «السماح» لتصلك المباريات والأهداف والأخبار العاجلة.</p>
+  <div class="ios" id="ios">
+    <b>على الآيفون اتبع هذه الخطوات:</b><br>
+    1. افتح هذه الصفحة في <b>Safari</b><br>
+    2. اضغط زر المشاركة <b>⎋</b> في الأسفل<br>
+    3. اختر <b>«إضافة إلى الشاشة الرئيسية»</b> ثم <b>إضافة</b><br>
+    4. افتح التطبيق من الشاشة الرئيسية واضغط «السماح بالإشعارات»
+  </div>
   <button id="btn" type="button">السماح بالإشعارات</button>
   <a class="back" id="back" href="#">الرجوع إلى الموقع</a>
   <div id="tok"></div>
@@ -57,7 +72,9 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
     p.textContent = 'شكرًا! ستصلك الإشعارات حتى عندما يكون الموقع مغلقًا.';
     btn.style.display = 'none';
     if (debug) return;
-    if (window.opener) {
+    if (standalone) {
+      setTimeout(function(){ location.href = PN_CONFIG.siteUrl; }, 1500);
+    } else if (window.opener) {
       try { window.opener.postMessage({ pn: 'ok' }, '*'); } catch(e){}
       setTimeout(function(){ window.close(); }, 1500);
     } else {
@@ -71,8 +88,17 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
     btn.disabled = false;
   }
 
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    fail('متصفحك لا يدعم الإشعارات. على الآيفون: أضف الموقع إلى الشاشة الرئيسية أولًا.');
+    if (isIOS && !standalone) {
+      h.textContent = 'إشعارات تونس FM على الآيفون 🔔';
+      p.textContent = 'آبل تسمح بالإشعارات فقط بعد إضافة الصفحة إلى الشاشة الرئيسية (iOS 16.4 أو أحدث).';
+      document.getElementById('ios').style.display = 'block';
+    } else {
+      fail(isIOS ? 'حدّث الآيفون إلى iOS 16.4 أو أحدث لتفعيل الإشعارات.' : 'متصفحك لا يدعم الإشعارات. جرّب Chrome.');
+    }
     btn.style.display = 'none';
     return;
   }
