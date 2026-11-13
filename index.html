@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تفعيل الإشعارات</title>
+<link rel="icon" href="/icon.png">
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+  font-family:Tahoma,Arial,sans-serif;background:#f4f4f4;color:#222;padding:20px}
+.box{width:100%;max-width:380px;background:#fff;border-radius:16px;padding:28px 22px;text-align:center;
+  box-shadow:0 8px 30px rgba(0,0,0,.12)}
+.ic{width:70px;height:70px;margin:0 auto 14px;border-radius:50%;background:#e53935;display:flex;align-items:center;justify-content:center}
+.ic svg{width:36px;height:36px;fill:#fff}
+h1{font-size:20px;margin:0 0 8px}
+p{font-size:14px;color:#666;line-height:1.7;margin:0 0 18px}
+button{width:100%;padding:13px;border:0;border-radius:10px;background:#e53935;color:#fff;font-size:16px;
+  font-family:inherit;cursor:pointer}
+button:disabled{opacity:.6}
+a.back{display:block;margin-top:14px;color:#888;font-size:13px}
+#tok{display:none;margin-top:14px;font-size:11px;word-break:break-all;background:#f6f6f6;padding:8px;border-radius:8px;text-align:left;direction:ltr}
+@media (prefers-color-scheme:dark){
+  body{background:#121212;color:#eee}.box{background:#1e1e1e}p{color:#aaa}#tok{background:#2a2a2a}
+}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg></div>
+  <h1 id="h">فعّل الإشعارات 🔔</h1>
+  <p id="p">اضغط على الزر ثم اختر «السماح» لتصلك المباريات والأهداف والأخبار العاجلة.</p>
+  <button id="btn" type="button">السماح بالإشعارات</button>
+  <a class="back" id="back" href="#">الرجوع إلى الموقع</a>
+  <div id="tok"></div>
+</div>
+
+<script src="/config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script>
+(function(){
+  var h = document.getElementById('h'), p = document.getElementById('p'),
+      btn = document.getElementById('btn'), back = document.getElementById('back'),
+      tok = document.getElementById('tok');
+  var qs = new URLSearchParams(location.search);
+  var debug = qs.get('debug') === '1';
+
+  // رابط الرجوع: فقط إلى موقعك الأصلي
+  var from = qs.get('from') || PN_CONFIG.siteUrl;
+  try { if (new URL(from).hostname.replace(/^www\./,'') !== new URL(PN_CONFIG.siteUrl).hostname.replace(/^www\./,'')) from = PN_CONFIG.siteUrl; }
+  catch(e){ from = PN_CONFIG.siteUrl; }
+  back.href = from;
+
+  function done(){
+    h.textContent = 'تم تفعيل الإشعارات ✅';
+    p.textContent = 'شكرًا! ستصلك الإشعارات حتى عندما يكون الموقع مغلقًا.';
+    btn.style.display = 'none';
+    if (debug) return;
+    if (window.opener) {
+      try { window.opener.postMessage({ pn: 'ok' }, '*'); } catch(e){}
+      setTimeout(function(){ window.close(); }, 1500);
+    } else {
+      setTimeout(function(){ location.href = from.split('#')[0] + '#pn-ok'; }, 1500);
+    }
+  }
+
+  function fail(msg){
+    h.textContent = 'تعذّر التفعيل';
+    p.textContent = msg;
+    btn.disabled = false;
+  }
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    fail('متصفحك لا يدعم الإشعارات. على الآيفون: أضف الموقع إلى الشاشة الرئيسية أولًا.');
+    btn.style.display = 'none';
+    return;
+  }
+
+  firebase.initializeApp(PN_CONFIG.firebase);
+  var messaging = firebase.messaging();
+
+  function getToken(){
+    return navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
+      .then(function(reg){ return messaging.getToken({ vapidKey: PN_CONFIG.vapidKey, serviceWorkerRegistration: reg }); })
+      .then(function(t){
+        if (!t) throw new Error('no token');
+        if (debug){ tok.style.display = 'block'; tok.textContent = t; }
+        done();
+      })
+      .catch(function(e){ console.log(e); fail('حدث خطأ، حاول مرة أخرى.'); });
+  }
+
+  if (Notification.permission === 'granted') { getToken(); return; }
+  if (Notification.permission === 'denied') {
+    fail('الإشعارات محظورة. افتح إعدادات الموقع في المتصفح (رمز القفل 🔒) واسمح بالإشعارات.');
+    btn.style.display = 'none';
+    return;
+  }
+
+  btn.onclick = function(){
+    btn.disabled = true;
+    Notification.requestPermission().then(function(perm){
+      if (perm === 'granted') getToken();
+      else fail('لم يتم السماح بالإشعارات.');
+    });
+  };
+})();
+</script>
+</body>
+</html>
