@@ -53,6 +53,7 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
 <script src="/config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
 <script>
 (function(){
   var h = document.getElementById('h'), p = document.getElementById('p'),
@@ -105,6 +106,17 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
 
   firebase.initializeApp(PN_CONFIG.firebase);
   var messaging = firebase.messaging();
+  var analytics = null;
+  try { analytics = firebase.analytics(); } catch(e) {}
+
+  // تسجيل مشترك جديد في Analytics مرة واحدة لكل جهاز
+  function track(t){
+    var old = null;
+    try { old = localStorage.getItem('pn_tok'); localStorage.setItem('pn_tok', t); } catch(e) {}
+    if (analytics && old !== t) {
+      analytics.logEvent(old ? 'push_resubscribe' : 'push_subscribe', { platform: isIOS ? 'ios' : 'other' });
+    }
+  }
 
   function getToken(){
     return navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
@@ -112,7 +124,8 @@ a.back{display:block;margin-top:14px;color:#888;font-size:13px}
       .then(function(t){
         if (!t) throw new Error('no token');
         if (debug){ tok.style.display = 'block'; tok.textContent = t; }
-        done();
+        track(t);
+        setTimeout(done, 400);
       })
       .catch(function(e){ console.log(e); fail('حدث خطأ، حاول مرة أخرى.'); });
   }
